@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <title>全國潔牙比賽模擬測驗</title>
+    <style>
+        body { font-family: "Microsoft JhengHei", sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; background-color: #e3f2fd; padding: 20px; }
+        .game-container { background: white; padding: 2rem; border-radius: 15px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); width: 100%; max-width: 500px; text-align: center; }
+        h1 { color: #007bff; font-size: 26px; margin-bottom: 10px; }
+        .btn-container { display: flex; flex-direction: column; gap: 10px; margin-top: 20px; }
+        button { padding: 14px; font-size: 16px; border: none; border-radius: 8px; background-color: #007bff; color: white; cursor: pointer; transition: 0.3s; }
+        button:hover { background-color: #0056b3; }
+        #score-display { margin-top: 20px; font-weight: bold; color: #28a745; font-size: 20px; }
+        .info-text { color: #666; font-size: 14px; margin-bottom: 15px; }
+        
+        /* 排行榜樣式 */
+        #leaderboard { margin-top: 30px; border-top: 2px solid #eee; padding-top: 20px; display: none; }
+        .leaderboard-title { color: #f39c12; font-size: 20px; margin-bottom: 10px; }
+        .leaderboard-list { list-style: none; padding: 0; text-align: left; background: #fff9f0; border-radius: 8px; overflow: hidden; }
+        .leaderboard-item { padding: 10px 15px; border-bottom: 1px solid #ffeaa7; display: flex; justify-content: space-between; }
+        .leaderboard-item:last-child { border-bottom: none; }
+    </style>
+</head>
+<body>
+
+<div class="game-container">
+    <h1>全國潔牙比賽模擬測驗</h1>
+    <p class="info-text">涵蓋範圍：牙齒構造、發育與刷牙方法</p>
+    
+    <div id="quiz-section">
+        <h2 id="question" style="font-size: 20px; color: #333;">載入中...</h2>
+        <div id="options" class="btn-container"></div>
+        <div id="score-display">目前得分：0</div>
+    </div>
+
+    <div id="leaderboard">
+        <div class="leaderboard-title">🏆 即時排行榜 (Top 5)</div>
+        <div id="leaderboard-list" class="leaderboard-list"></div>
+        <button onclick="location.reload()" style="margin-top: 15px; background-color: #95a5a6;">重新挑戰</button>
+    </div>
+</div>
+
+<script>
+    // --- 1. 後台連線設定 ---
+    const SUB_URL = "https://wwbiondznucztprpgpaw.supabase.co";
+    const SUB_KEY = "sb_publishable_62FaLOtoNtO9o-Zz05kbkA_VLv2pnWv";
+
+    // --- 2. 潔牙比賽題庫 (參考 PDF 內容) ---
+    const quizData = [
+        { q: "乳齒齒列共有 20 顆，在出生後 6 個月時，乳牙就開始發育。", a: ["對", "錯"], correct: 0 },
+        { q: "口腔內第一顆長出的恆牙是什麼？", a: ["中門牙", "第一大臼齒", "犬齒", "智齒"], correct: 1 },
+        { q: "人類一生最多可擁有幾顆牙齒 (乳牙 20 顆 + 恆牙 32 顆)？", a: ["28 顆", "32 顆", "52 顆", "60 顆"], correct: 2 },
+        { q: "下列何者為牙齒最外層結構？", a: ["牙釉質", "牙本質", "牙髓", "牙骨質"], correct: 0 },
+        { q: "刷牙最好的時機是什麼時候？", a: ["起床時", "餐後及睡前", "洗澡時", "隨時都可以"], correct: 1 },
+        { q: "刷牙時，牙刷應傾斜幾度對準牙齦與牙齒交界處？", a: ["15 度", "45 度", "60 度", "90 度"], correct: 1 },
+        { q: "建議每次刷牙的時間至少應為多久？", a: ["30 秒", "1 分鐘", "2~3 分鐘", "5 分鐘"], correct: 2 },
+        { q: "使用牙線主要是為了清除什麼？", a: ["食物殘渣", "牙縫牙菌斑", "舌苔", "牙結石"], correct: 1 },
+        { q: "含氟牙膏的建議濃度應為多少 ppm 以上？", a: ["500 ppm", "800 ppm", "1000 ppm", "1500 ppm"], correct: 2 },
+        { q: "牙刷應大約每隔多久更換一次？", a: ["一週", "一個月", "三個月", "半年"], correct: 2 }
+    ];
+
+    let currentIdx = 0;
+    let score = 0;
+
+    const questionEl = document.getElementById('question');
+    const optionsEl = document.getElementById('options');
+    const scoreEl = document.getElementById('score-display');
+    const quizSection = document.getElementById('quiz-section');
+    const leaderboardSection = document.getElementById('leaderboard');
+
+    // --- 3. 遊戲邏輯 ---
+    function loadQuiz() {
+        const currentData = quizData[currentIdx];
+        questionEl.innerText = "第 " + (currentIdx + 1) + " 題：" + currentData.q;
+        optionsEl.innerHTML = ''; 
+        currentData.a.forEach((option, i) => {
+            const btn = document.createElement('button');
+            btn.innerText = option;
+            btn.onclick = function() { checkAnswer(i); };
+            optionsEl.appendChild(btn);
+        });
+    }
+
+    function checkAnswer(selected) {
+        if (selected === quizData[currentIdx].correct) {
+            score += 10;
+            alert("✅ 答對了！");
+        } else {
+            const correctAns = quizData[currentIdx].a[quizData[currentIdx].correct];
+            alert("❌ 答錯了！正確答案是：" + correctAns);
+        }
+
+        currentIdx++;
+        if (currentIdx < quizData.length) {
+            loadQuiz();
+        } else {
+            finishGame();
+        }
+        scoreEl.innerText = "目前得分：" + score;
+    }
+
+    async function finishGame() {
+        quizSection.style.display = 'none';
+        const userName = prompt("🎉 測驗完成！你的得分是 " + score + "。請輸入名字以紀錄排行榜：");
+        if (userName) {
+            await uploadScore(userName, score);
+        }
+        await getLeaderboard();
+    }
+
+    // --- 4. Supabase 功能 (上傳與抓取) ---
+    async function uploadScore(name, finalScore) {
+        try {
+            await fetch(SUB_URL + "/rest/v1/scores", {
+                method: "POST",
+                headers: {
+                    "apikey": SUB_KEY,
+                    "Authorization": "Bearer " + SUB_KEY,
+                    "Content-Type": "application/json",
+                    "Prefer": "return=minimal"
+                },
+                body: JSON.stringify({ username: name, score: finalScore })
+            });
+        } catch (e) { console.error(e); }
+    }
+
+    async function getLeaderboard() {
+        try {
+            const response = await fetch(SUB_URL + "/rest/v1/scores?select=username,score&order=score.desc&limit=5", {
+                method: "GET",
+                headers: {
+                    "apikey": SUB_KEY,
+                    "Authorization": "Bearer " + SUB_KEY
+                }
+            });
+            const data = await response.json();
+            
+            const listEl = document.getElementById('leaderboard-list');
+            listEl.innerHTML = '';
+            leaderboardSection.style.display = 'block';
+
+            data.forEach((item, index) => {
+                const div = document.createElement('div');
+                div.className = 'leaderboard-item';
+                div.innerHTML = `<span>第 ${index + 1} 名: ${item.username}</span> <span>${item.score} 分</span>`;
+                listEl.appendChild(div);
+            });
+        } catch (e) { console.error(e); }
+    }
+
+    window.onload = loadQuiz;
+</script>
+
+</body>
+</html>

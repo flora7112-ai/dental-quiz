@@ -1,42 +1,7 @@
-// --- 上傳分數：新增錯誤回報功能 ---
-    async function uploadScore() {
-        console.log("正在準備上傳分數...");
+async function getLeaderboard() {
         try {
-            const response = await fetch(`${SUB_URL}/rest/v1/scores`, {
-                method: "POST",
-                headers: { 
-                    "apikey": SUB_KEY, 
-                    "Authorization": `Bearer ${SUB_KEY}`, 
-                    "Content-Type": "application/json",
-                    "Prefer": "return=minimal"
-                },
-                body: JSON.stringify({ 
-                    username: playerName, 
-                    score: score 
-                })
-            });
-
-            if (!response.ok) {
-                const errorData = await response.json();
-                console.error("上傳失敗細節:", errorData);
-                alert("上傳失敗！錯誤碼：" + response.status + "，原因：" + errorData.message);
-            } else {
-                console.log("上傳成功！");
-            }
-        } catch (e) { 
-            console.error("連線發生問題:", e);
-            alert("連線失敗，請檢查網路！");
-        }
-    }
-
-    // --- 抓取排行榜：新增強制清空緩存 ---
-    async function getLeaderboard() {
-        // 使用隨機數防止瀏覽器記住舊的「無紀錄」畫面
-        const cacheBuster = Math.random();
-        const timeLimit = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-        
-        try {
-            const response = await fetch(`${SUB_URL}/rest/v1/scores?select=username,score&created_at=gte.${timeLimit}&order=score.desc&limit=10&t=${cacheBuster}`, {
+            // 移除 created_at 的時間過濾，直接抓歷史最高前 10 名
+            const response = await fetch(`${SUB_URL}/rest/v1/scores?select=username,score&order=score.desc&limit=10`, {
                 headers: { "apikey": SUB_KEY, "Authorization": `Bearer ${SUB_KEY}` }
             });
             const data = await response.json();
@@ -44,8 +9,7 @@
             listEl.innerHTML = '';
             
             if (!data || data.length === 0) {
-                listEl.innerHTML = '<p>目前尚無紀錄 (請檢查資料庫內容)</p>';
-                console.log("API 傳回空資料，請至 Supabase 確認資料表是否有資料且時間正確。");
+                listEl.innerHTML = '<p>資料庫目前是空的，請確認上傳是否成功。</p>';
             } else {
                 data.forEach((item, index) => {
                     const div = document.createElement('div');

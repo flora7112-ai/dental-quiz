@@ -1,7 +1,151 @@
-async function getLeaderboard() {
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <title>全國潔牙比賽 - 每日挑戰版</title>
+    <style>
+        body { font-family: "Microsoft JhengHei", sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; background-color: #e3f2fd; padding: 20px; }
+        .game-container { background: white; padding: 2rem; border-radius: 15px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); width: 100%; max-width: 500px; text-align: center; }
+        h1 { color: #007bff; font-size: 24px; margin-bottom: 20px; }
+        .btn-container { display: flex; flex-direction: column; gap: 10px; margin-top: 20px; }
+        button { padding: 14px; font-size: 16px; border: none; border-radius: 8px; background-color: #007bff; color: white; cursor: pointer; transition: 0.3s; }
+        button:hover { background-color: #0056b3; }
+        #score-display { margin-top: 20px; font-weight: bold; color: #28a745; font-size: 20px; }
+        input[type="text"] { padding: 12px; width: 85%; border: 2px solid #ddd; border-radius: 8px; font-size: 18px; margin-bottom: 10px; outline: none; }
+        #leaderboard { margin-top: 30px; border-top: 2px solid #eee; padding-top: 20px; display: none; }
+        .leaderboard-item { padding: 10px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; font-size: 18px; }
+        .daily-tag { color: #e67e22; font-weight: bold; margin-bottom: 5px; font-size: 16px; }
+    </style>
+</head>
+<body>
+
+<div class="game-container">
+    <h1>全國潔牙比賽模擬測驗</h1>
+    
+    <div id="start-screen">
+        <p class="daily-tag">🏆 今日 24h 積分賽</p>
+        <p>請輸入您的名字開始測驗：</p>
+        <input type="text" id="player-name-input" placeholder="例如：王小明" maxlength="10">
+        <div class="btn-container">
+            <button onclick="startGame()">開始隨機 20 題</button>
+        </div>
+    </div>
+
+    <div id="quiz-section" style="display: none;">
+        <h2 id="question" style="font-size: 20px; line-height: 1.5;">載入中...</h2>
+        <div id="options" class="btn-container"></div>
+        <div id="score-display">目前得分：0</div>
+    </div>
+
+    <div id="leaderboard">
+        <h2 style="color: #f39c12;">🏆 今日排行榜 (Top 10)</h2>
+        <p style="font-size: 12px; color: #999;">僅顯示 24 小時內的最高成績</p>
+        <div id="leaderboard-list"></div>
+        <button onclick="location.reload()" style="margin-top: 20px; background-color: #95a5a6;">重新挑戰</button>
+    </div>
+</div>
+
+<script>
+    const SUB_URL = "https://wwbiondznucztprpgpaw.supabase.co";
+    const SUB_KEY = "sb_publishable_62FaLOtoNtO9o-Zz05kbkA_VLv2pnWv";
+
+    let quizData = [];
+    let currentIdx = 0;
+    let score = 0;
+    let playerName = "";
+
+    function shuffleArray(array) {
+        for (let i = array.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [array[i], array[j]] = [array[j], array[i]];
+        }
+        return array;
+    }
+
+    async function fetchQuestions() {
         try {
-            // 移除 created_at 的時間過濾，直接抓歷史最高前 10 名
-            const response = await fetch(`${SUB_URL}/rest/v1/scores?select=username,score&order=score.desc&limit=10`, {
+            const response = await fetch(`${SUB_URL}/rest/v1/questions?select=*`, {
+                headers: { "apikey": SUB_KEY, "Authorization": `Bearer ${SUB_KEY}` }
+            });
+            const allData = await response.json();
+            let formattedData = allData.map(item => ({
+                q: item.q,
+                a: [item.a1, item.a2, item.a3, item.a4],
+                correct: parseInt(item.correct) - 1
+            }));
+            quizData = shuffleArray(formattedData).slice(0, 20);
+        } catch (e) { alert("題庫下載失敗"); }
+    }
+
+    async function startGame() {
+        const input = document.getElementById('player-name-input');
+        if (!input.value.trim()) return alert("請輸入名字！");
+        playerName = input.value;
+        await fetchQuestions();
+        if (quizData.length === 0) return alert("題庫沒資料");
+        document.getElementById('start-screen').style.display = 'none';
+        document.getElementById('quiz-section').style.display = 'block';
+        loadQuiz();
+    }
+
+    function loadQuiz() {
+        const currentData = quizData[currentIdx];
+        document.getElementById('question').innerText = `第 ${currentIdx + 1} / ${quizData.length} 題：${currentData.q}`;
+        const optionsEl = document.getElementById('options');
+        optionsEl.innerHTML = '';
+        currentData.a.forEach((option, i) => {
+            const btn = document.createElement('button');
+            btn.innerText = option;
+            btn.onclick = () => checkAnswer(i);
+            optionsEl.appendChild(btn);
+        });
+    }
+
+    function checkAnswer(selected) {
+        if (selected === quizData[currentIdx].correct) {
+            score += 5;
+            alert("✅ 答對了！");
+        } else {
+            alert(`❌ 答錯了！正確答案是：${quizData[currentIdx].a[quizData[currentIdx].correct]}`);
+        }
+        currentIdx++;
+        if (currentIdx < quizData.length) loadQuiz();
+        else finishGame();
+        document.getElementById('score-display').innerText = `目前得分：${score}`;
+    }
+
+    async function finishGame() {
+        document.getElementById('quiz-section').style.display = 'none';
+        document.getElementById('leaderboard').style.display = 'block';
+        document.getElementById('leaderboard-list').innerHTML = '<p>正在儲存成績並同步排行...</p>';
+        
+        await uploadScore();
+        // 增加到 2 秒延遲，確保資料庫 index 更新完成
+        setTimeout(getLeaderboard, 2000); 
+    }
+
+    async function uploadScore() {
+        try {
+            await fetch(`${SUB_URL}/rest/v1/scores`, {
+                method: "POST",
+                headers: { 
+                    "apikey": SUB_KEY, 
+                    "Authorization": `Bearer ${SUB_KEY}`, 
+                    "Content-Type": "application/json",
+                    "Prefer": "return=minimal" 
+                },
+                body: JSON.stringify({ username: playerName, score: score })
+            });
+        } catch (e) { console.error(e); }
+    }
+
+    async function getLeaderboard() {
+        // 這裡使用全世界通用的 UTC 時間計算 24 小時前，避免時區落差導致的無紀錄
+        const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+        
+        try {
+            // 加入日期過濾 gte (大於等於 24 小時前)
+            const response = await fetch(`${SUB_URL}/rest/v1/scores?select=username,score&created_at=gte.${dayAgo}&order=score.desc&limit=10`, {
                 headers: { "apikey": SUB_KEY, "Authorization": `Bearer ${SUB_KEY}` }
             });
             const data = await response.json();
@@ -9,7 +153,7 @@ async function getLeaderboard() {
             listEl.innerHTML = '';
             
             if (!data || data.length === 0) {
-                listEl.innerHTML = '<p>資料庫目前是空的，請確認上傳是否成功。</p>';
+                listEl.innerHTML = '<p>今日目前尚無紀錄</p>';
             } else {
                 data.forEach((item, index) => {
                     const div = document.createElement('div');
@@ -18,7 +162,8 @@ async function getLeaderboard() {
                     listEl.appendChild(div);
                 });
             }
-        } catch (e) { 
-            console.error("載入榜單出錯:", e);
-        }
+        } catch (e) { console.error(e); }
     }
+</script>
+</body>
+</html>

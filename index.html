@@ -1,153 +1,51 @@
-<!DOCTYPE html>
-<html lang="zh-Hant">
-<head>
-    <meta charset="UTF-8">
-    <title>全國潔牙比賽模擬測驗 - 正式版</title>
-    <style>
-        body { font-family: "Microsoft JhengHei", sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; background-color: #e3f2fd; padding: 20px; }
-        .game-container { background: white; padding: 2rem; border-radius: 15px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); width: 100%; max-width: 500px; text-align: center; }
-        h1 { color: #007bff; font-size: 26px; margin-bottom: 10px; }
-        .btn-container { display: flex; flex-direction: column; gap: 10px; margin-top: 20px; }
-        button { padding: 14px; font-size: 16px; border: none; border-radius: 8px; background-color: #007bff; color: white; cursor: pointer; transition: 0.3s; }
-        button:hover { background-color: #0056b3; }
-        #score-display { margin-top: 20px; font-weight: bold; color: #28a745; font-size: 20px; }
-        input[type="text"] { padding: 12px; width: 85%; border: 2px solid #ddd; border-radius: 8px; font-size: 18px; margin-bottom: 10px; outline: none; }
-        input[type="text"]:focus { border-color: #007bff; }
-        #leaderboard { margin-top: 30px; border-top: 2px solid #eee; padding-top: 20px; display: none; }
-        .leaderboard-item { padding: 10px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; font-size: 18px; }
-        .daily-tag { color: #e67e22; font-weight: bold; margin-bottom: 10px; font-size: 18px; }
-    </style>
-</head>
-<body>
-
-<div class="game-container">
-    <h1>全國潔牙比賽模擬測驗</h1>
-    
-    <div id="start-screen">
-        <p class="daily-tag">📅 24小時限時挑戰</p>
-        <p>請輸入您的名字開始測驗：</p>
-        <input type="text" id="player-name-input" placeholder="例如：王小明" maxlength="10">
-        <div class="btn-container">
-            <button onclick="startGame()">進入測驗</button>
-        </div>
-    </div>
-
-    <div id="quiz-section" style="display: none;">
-        <h2 id="question" style="font-size: 20px; line-height: 1.5;">載入中...</h2>
-        <div id="options" class="btn-container"></div>
-        <div id="score-display">目前得分：0</div>
-    </div>
-
-    <div id="leaderboard">
-        <h2 style="color: #f39c12;">🏆 今日排行榜 (Top 5)</h2>
-        <p style="font-size: 12px; color: #999;">僅顯示過去 24 小時內的最高分紀錄</p>
-        <div id="leaderboard-list"></div>
-        <button onclick="location.reload()" style="margin-top: 20px; background-color: #95a5a6;">重新挑戰</button>
-    </div>
-</div>
-
-<script>
-    // --- 後台連線設定 ---
-    const SUB_URL = "https://wwbiondznucztprpgpaw.supabase.co";
-    const SUB_KEY = "sb_publishable_62FaLOtoNtO9o-Zz05kbkA_VLv2pnWv";
-
-    // --- 潔牙比賽 12 題 (四選一格式) ---
-    const quizData = [
-        { q: "乳齒齒列共有幾顆牙齒？", a: ["10顆", "20顆", "28顆", "32顆"], correct: 1 },
-        { q: "口腔內第一顆長出的恆牙通常是什麼？", a: ["第一大臼齒(六歲齒)", "中門牙", "犬齒", "智齒"], correct: 0 },
-        { q: "人類一生中，乳牙(20顆)與恆牙(32顆)總共會有幾顆？", a: ["28顆", "32顆", "50顆", "52顆"], correct: 3 },
-        { q: "牙齒結構中，最外層且最堅硬的部分是什麼？", a: ["牙釉質", "牙本質", "牙髓", "牙骨質"], correct: 0 },
-        { q: "刷牙最好的時機是什麼時候？", a: ["起床後", "餐後及睡前", "洗澡時", "吃甜點前"], correct: 1 },
-        { q: "刷牙時，牙刷應傾斜幾度對準牙齦與牙齒交界處？", a: ["15度", "45度", "90度", "180度"], correct: 1 },
-        { q: "貝氏刷牙法每次刷兩顆牙，橫向往返應至少刷幾次？", a: ["2次", "5次", "10次", "100次"], correct: 2 },
-        { q: "建議每次刷牙的時間至少應為多久？", a: ["30秒", "1分鐘", "2~3分鐘", "10分鐘"], correct: 2 },
-        { q: "使用牙線主要目的是清除哪一個部位的牙菌斑？", a: ["咬合面", "舌頭表面", "牙鄰接面(牙縫)", "牙根尖區"], correct: 2 },
-        { q: "含氟牙膏建議濃度應在多少 ppm 以上才有防蛀效果？", a: ["500 ppm", "800 ppm", "1000 ppm", "2000 ppm"], correct: 2 },
-        { q: "牙刷刷毛開花或建議大約使用多久應該更換？", a: ["一個月", "三個月", "半年", "一年"], correct: 1 },
-        { q: "關於潔牙習慣，下列敘述何者正確？", a: ["漱口水可取代刷牙", "吃口香糖就不必刷牙", "睡前刷牙最重要", "牙膏用越多越好"], correct: 2 }
-    ];
-
-    let currentIdx = 0;
-    let score = 0;
-    let playerName = "";
-
-    function startGame() {
-        const input = document.getElementById('player-name-input');
-        if (!input.value.trim()) {
-            alert("請先輸入名字！");
-            return;
-        }
-        playerName = input.value;
-        document.getElementById('start-screen').style.display = 'none';
-        document.getElementById('quiz-section').style.display = 'block';
-        loadQuiz();
-    }
-
-    function loadQuiz() {
-        const currentData = quizData[currentIdx];
-        document.getElementById('question').innerText = `第 ${currentIdx + 1} 題：${currentData.q}`;
-        const optionsEl = document.getElementById('options');
-        optionsEl.innerHTML = '';
-        currentData.a.forEach((option, i) => {
-            const btn = document.createElement('button');
-            btn.innerText = option;
-            btn.onclick = () => checkAnswer(i);
-            optionsEl.appendChild(btn);
-        });
-    }
-
-    function checkAnswer(selected) {
-        if (selected === quizData[currentIdx].correct) {
-            score += 10;
-            alert("✅ 答對了！");
-        } else {
-            alert(`❌ 答錯了！正確答案是：${quizData[currentIdx].a[quizData[currentIdx].correct]}`);
-        }
-        currentIdx++;
-        if (currentIdx < quizData.length) {
-            loadQuiz();
-        } else {
-            finishGame();
-        }
-        document.getElementById('score-display').innerText = `目前得分：${score}`;
-    }
-
-    async function finishGame() {
-        document.getElementById('quiz-section').style.display = 'none';
-        await uploadScore(playerName, score);
-        await getLeaderboard();
-    }
-
-    async function uploadScore(name, finalScore) {
+// --- 上傳分數：新增錯誤回報功能 ---
+    async function uploadScore() {
+        console.log("正在準備上傳分數...");
         try {
             const response = await fetch(`${SUB_URL}/rest/v1/scores`, {
                 method: "POST",
-                headers: {
-                    "apikey": SUB_KEY,
-                    "Authorization": `Bearer ${SUB_KEY}`,
+                headers: { 
+                    "apikey": SUB_KEY, 
+                    "Authorization": `Bearer ${SUB_KEY}`, 
                     "Content-Type": "application/json",
                     "Prefer": "return=minimal"
                 },
-                body: JSON.stringify({ username: name, score: finalScore })
+                body: JSON.stringify({ 
+                    username: playerName, 
+                    score: score 
+                })
             });
-        } catch (e) { console.error("上傳失敗:", e); }
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                console.error("上傳失敗細節:", errorData);
+                alert("上傳失敗！錯誤碼：" + response.status + "，原因：" + errorData.message);
+            } else {
+                console.log("上傳成功！");
+            }
+        } catch (e) { 
+            console.error("連線發生問題:", e);
+            alert("連線失敗，請檢查網路！");
+        }
     }
 
+    // --- 抓取排行榜：新增強制清空緩存 ---
     async function getLeaderboard() {
-        // 計算 24 小時前的時間 (解決時區差異問題)
+        // 使用隨機數防止瀏覽器記住舊的「無紀錄」畫面
+        const cacheBuster = Math.random();
         const timeLimit = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
         
         try {
-            const response = await fetch(`${SUB_URL}/rest/v1/scores?select=username,score&created_at=gte.${timeLimit}&order=score.desc&limit=5`, {
+            const response = await fetch(`${SUB_URL}/rest/v1/scores?select=username,score&created_at=gte.${timeLimit}&order=score.desc&limit=10&t=${cacheBuster}`, {
                 headers: { "apikey": SUB_KEY, "Authorization": `Bearer ${SUB_KEY}` }
             });
             const data = await response.json();
             const listEl = document.getElementById('leaderboard-list');
             listEl.innerHTML = '';
-            document.getElementById('leaderboard').style.display = 'block';
             
             if (!data || data.length === 0) {
-                listEl.innerHTML = '<p>今日尚無紀錄，快來搶佔第一名！</p>';
+                listEl.innerHTML = '<p>目前尚無紀錄 (請檢查資料庫內容)</p>';
+                console.log("API 傳回空資料，請至 Supabase 確認資料表是否有資料且時間正確。");
             } else {
                 data.forEach((item, index) => {
                     const div = document.createElement('div');
@@ -156,8 +54,7 @@
                     listEl.appendChild(div);
                 });
             }
-        } catch (e) { console.error("讀取排行榜失敗:", e); }
+        } catch (e) { 
+            console.error("載入榜單出錯:", e);
+        }
     }
-</script>
-</body>
-</html>

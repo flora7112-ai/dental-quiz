@@ -2,7 +2,8 @@
 <html lang="zh-Hant">
 <head>
     <meta charset="UTF-8">
-    <title>全國潔牙比賽 - 每日挑戰版</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>全國潔牙比賽模擬測驗</title>
     <style>
         body { font-family: "Microsoft JhengHei", sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; background-color: #e3f2fd; padding: 20px; }
         .game-container { background: white; padding: 2rem; border-radius: 15px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); width: 100%; max-width: 500px; text-align: center; }
@@ -14,20 +15,19 @@
         input[type="text"] { padding: 12px; width: 85%; border: 2px solid #ddd; border-radius: 8px; font-size: 18px; margin-bottom: 10px; outline: none; }
         #leaderboard { margin-top: 30px; border-top: 2px solid #eee; padding-top: 20px; display: none; }
         .leaderboard-item { padding: 10px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; font-size: 18px; }
-        .daily-tag { color: #e67e22; font-weight: bold; margin-bottom: 5px; font-size: 16px; }
+        .status-msg { color: #888; font-size: 14px; font-style: italic; }
     </style>
 </head>
 <body>
 
 <div class="game-container">
-    <h1>全國潔牙比賽模擬測驗</h1>
+    <h1>🦷 全國潔牙比賽測驗</h1>
     
     <div id="start-screen">
-        <p class="daily-tag">🏆 今日 24h 積分賽</p>
         <p>請輸入您的名字開始測驗：</p>
         <input type="text" id="player-name-input" placeholder="例如：王小明" maxlength="10">
         <div class="btn-container">
-            <button onclick="startGame()">開始隨機 20 題</button>
+            <button onclick="startGame()">開始挑戰 (隨機20題)</button>
         </div>
     </div>
 
@@ -39,7 +39,6 @@
 
     <div id="leaderboard">
         <h2 style="color: #f39c12;">🏆 今日排行榜 (Top 10)</h2>
-        <p style="font-size: 12px; color: #999;">僅顯示 24 小時內的最高成績</p>
         <div id="leaderboard-list"></div>
         <button onclick="location.reload()" style="margin-top: 20px; background-color: #95a5a6;">重新挑戰</button>
     </div>
@@ -68,13 +67,14 @@
                 headers: { "apikey": SUB_KEY, "Authorization": `Bearer ${SUB_KEY}` }
             });
             const allData = await response.json();
+            // 自動修正 Excel 1-4 轉 0-3
             let formattedData = allData.map(item => ({
                 q: item.q,
                 a: [item.a1, item.a2, item.a3, item.a4],
                 correct: parseInt(item.correct) - 1
             }));
             quizData = shuffleArray(formattedData).slice(0, 20);
-        } catch (e) { alert("題庫下載失敗"); }
+        } catch (e) { alert("題庫連線失敗！"); }
     }
 
     async function startGame() {
@@ -82,7 +82,7 @@
         if (!input.value.trim()) return alert("請輸入名字！");
         playerName = input.value;
         await fetchQuestions();
-        if (quizData.length === 0) return alert("題庫沒資料");
+        if (quizData.length === 0) return alert("題庫為空！");
         document.getElementById('start-screen').style.display = 'none';
         document.getElementById('quiz-section').style.display = 'block';
         loadQuiz();
@@ -117,10 +117,9 @@
     async function finishGame() {
         document.getElementById('quiz-section').style.display = 'none';
         document.getElementById('leaderboard').style.display = 'block';
-        document.getElementById('leaderboard-list').innerHTML = '<p>正在儲存成績並同步排行...</p>';
+        document.getElementById('leaderboard-list').innerHTML = '<p class="status-msg">正在同步雲端分數...</p>';
         
         await uploadScore();
-        // 增加到 2 秒延遲，確保資料庫 index 更新完成
         setTimeout(getLeaderboard, 2000); 
     }
 
@@ -128,32 +127,23 @@
         try {
             await fetch(`${SUB_URL}/rest/v1/scores`, {
                 method: "POST",
-                headers: { 
-                    "apikey": SUB_KEY, 
-                    "Authorization": `Bearer ${SUB_KEY}`, 
-                    "Content-Type": "application/json",
-                    "Prefer": "return=minimal" 
-                },
+                headers: { "apikey": SUB_KEY, "Authorization": `Bearer ${SUB_KEY}`, "Content-Type": "application/json", "Prefer": "return=minimal" },
                 body: JSON.stringify({ username: playerName, score: score })
             });
         } catch (e) { console.error(e); }
     }
 
     async function getLeaderboard() {
-        // 這裡使用全世界通用的 UTC 時間計算 24 小時前，避免時區落差導致的無紀錄
         const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-        
         try {
-            // 加入日期過濾 gte (大於等於 24 小時前)
             const response = await fetch(`${SUB_URL}/rest/v1/scores?select=username,score&created_at=gte.${dayAgo}&order=score.desc&limit=10`, {
                 headers: { "apikey": SUB_KEY, "Authorization": `Bearer ${SUB_KEY}` }
             });
             const data = await response.json();
             const listEl = document.getElementById('leaderboard-list');
             listEl.innerHTML = '';
-            
             if (!data || data.length === 0) {
-                listEl.innerHTML = '<p>今日目前尚無紀錄</p>';
+                listEl.innerHTML = '<p>今日尚無紀錄</p>';
             } else {
                 data.forEach((item, index) => {
                     const div = document.createElement('div');
